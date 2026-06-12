@@ -1,0 +1,18 @@
+# Secretos y credenciales — nunca deben versionarse
+.env
+firebase-credentials.json
+
+# Entornos virtuales de Python
+.venv/
+venv/
+env/
+
+# Caché de Python
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Distribución / empaquetado
+dist/
+build/
+*.egg-info/
