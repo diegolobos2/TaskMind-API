@@ -15,12 +15,13 @@ from app.routers import tasks  # noqa: E402
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Gestiona el ciclo de vida de la aplicación.
+    """Gestiona el ciclo de vida de la aplicación."""
+    try:
+        await init_firebase()
+        print("Firebase inicializado correctamente.")
+    except Exception as e:
+        print(f"Firebase no inicializado. Modo desarrollo sin Firebase: {e}")
 
-    Al arrancar: inicializa la conexión con Firebase.
-    Al cerrar: libera recursos (extensible).
-    """
-    await init_firebase()
     yield
 
 
@@ -33,5 +34,9 @@ app = FastAPI(
     version="1.0.0",
     lifespan=lifespan,
 )
+
+@app.get("/health")
+async def health_check():
+    return {"status": "ok"}
 
 app.include_router(tasks.router, prefix="/api/v1/tasks", tags=["tasks"])
