@@ -4,6 +4,7 @@ import os
 from datetime import datetime, timezone
 from typing import Annotated, Literal
 
+import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from firebase_admin import auth
@@ -185,3 +186,40 @@ async def list_tasks(
         tasks.append(TaskResponse(id=doc.id, **data))
 
     return tasks
+
+
+@router.post(
+    "/test-notification",
+    status_code=status.HTTP_200_OK,
+    summary="Enviar una notificación de prueba al servicio notification-service",
+)
+async def test_notification() -> dict[str, str]:
+    """Envía una petición educativa al microservicio de notificaciones."""
+    payload = {
+        "recipient": "alumno@test.com",
+        "message": "Nueva tarea creada desde TaskMind",
+    }
+    url = "http://notification-service:9000/notify"
+
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            response = await client.post(url, json=payload)
+            response.raise_for_status()
+    except httpx.RequestError as exc:
+        logger.error("Error de conexión con notification-service: %s", exc)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="No se pudo contactar al servicio de notificaciones.",
+        )
+    except httpx.HTTPStatusError as exc:
+        logger.error(
+            "Notification-service respondió con estado %s: %s",
+            exc.response.status_code,
+            exc.response.text,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="El servicio de notificaciones respondió con error.",
+        )
+
+    return response.json()

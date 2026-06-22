@@ -3,6 +3,7 @@
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+import httpx
 from httpx import AsyncClient
 from tests.conftest import unauthenticated_client  # noqa: F401  (fixture re-export)
 
@@ -79,6 +80,70 @@ async def test_create_task_sin_header_auth_retorna_401(
     response = await unauthenticated_client.post("/api/v1/tasks/", json=payload)
 
     assert response.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_notification_service_integration_exitosa(client: AsyncClient):
+    """POST /api/v1/tasks/test-notification reenvía la respuesta de notification-service."""
+    mock_response = MagicMock()
+    mock_response.status_code = 200
+    mock_response.json.return_value = {
+        "status": "queued",
+        "recipient": "alumno@test.com",
+    }
+    mock_response.raise_for_status = MagicMock()
+
+    class MockAsyncClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+        async def post(self, *args, **kwargs):
+            return mock_response
+
+    with patch("app.routers.tasks.httpx.AsyncClient", new=MockAsyncClient):
+        response = await client.post(
+            "/api/v1/tasks/test-notification",
+            headers={"Authorization": "Bearer fake-token-para-test"},
+        )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "status": "queued",
+        "recipient": "alumno@test.com",
+    }
+
+
+@pytest.mark.asyncio
+async def test_notification_service_integration_falla_conexion(client: AsyncClient):
+    """Si notification-service no responde, se retorna 503."""
+
+    class MockAsyncClientError:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+        async def post(self, *args, **kwargs):
+            raise httpx.RequestError("connection error")
+
+    with patch("app.routers.tasks.httpx.AsyncClient", new=MockAsyncClientError):
+        response = await client.post(
+            "/api/v1/tasks/test-notification",
+            headers={"Authorization": "Bearer fake-token-para-test"},
+        )
+
+    assert response.status_code == 503
+    assert response.json()["detail"] == "No se pudo contactar al servicio de notificaciones."
 
 
 # ---------------------------------------------------------------------------
