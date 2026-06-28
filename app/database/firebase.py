@@ -33,8 +33,11 @@ async def init_firebase() -> None:
     credentials_path = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS")
     if not credentials_path:
         raise EnvironmentError(
-            "La variable de entorno GOOGLE_APPLICATION_CREDENTIALS no está definida. "
-            "Verifica que el archivo .env contiene la ruta al archivo de credenciales."
+            (
+                "La variable de entorno GOOGLE_APPLICATION_CREDENTIALS "
+                "no está definida. Verifica que el archivo .env contiene "
+                "la ruta al archivo de credenciales."
+            )
         )
 
     cred = credentials.Certificate(credentials_path)
