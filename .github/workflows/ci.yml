@@ -45,7 +45,29 @@ jobs:
         run: printf '%s' "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
 
       - name: Build Docker image
-        run: docker build -t ghcr.io/diegolobos2/taskmind-api:latest .
+        run: docker build -t ghcr.io/${{ github.repository_owner }}/taskmind-api:latest .
+
+      - name: Validate Docker image with smoke test
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GOOGLE_APPLICATION_CREDENTIALS: /workspace/firebase-credentials.json
+        run: |
+          set -euo pipefail
+          cleanup() {
+            docker rm -f taskmind-smoke >/dev/null 2>&1 || true
+          }
+          trap cleanup EXIT
+          docker rm -f taskmind-smoke >/dev/null 2>&1 || true
+          docker run -d \
+            --name taskmind-smoke \
+            -p 8000:8000 \
+            -e GEMINI_API_KEY="${GEMINI_API_KEY}" \
+            -e GOOGLE_APPLICATION_CREDENTIALS="${GOOGLE_APPLICATION_CREDENTIALS}" \
+            -v "$PWD/firebase-credentials.json:/workspace/firebase-credentials.json:ro" \
+            ghcr.io/${{ github.repository_owner }}/taskmind-api:latest
+          echo "Waiting for the application to start..."
+          sleep 10
+          curl --fail --retry 5 --retry-delay 2 http://localhost:8000/health
 
       - name: Push Docker image to GHCR
-        run: docker push ghcr.io/diegolobos2/taskmind-api:latest
+        run: docker push ghcr.io/${{ github.repository_owner }}/taskmind-api:latest
