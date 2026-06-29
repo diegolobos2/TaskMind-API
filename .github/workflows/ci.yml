@@ -45,7 +45,12 @@ jobs:
         run: printf '%s' "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
 
       - name: Build Docker image
-        run: docker build -t ghcr.io/${{ github.repository_owner }}/taskmind-api:latest .
+        run: |
+          docker build \
+            -t ghcr.io/${{ github.repository_owner }}/taskmind-api:latest \
+            -t ghcr.io/${{ github.repository_owner }}/taskmind-api:${{ github.sha }} \
+            -t southamerica-east1-docker.pkg.dev/taskmind-500207/taskmind/taskmind-api:v1 \
+            .
 
       - name: Validate Docker image with smoke test
         env:
@@ -70,4 +75,31 @@ jobs:
           curl --fail --retry 5 --retry-delay 2 http://localhost:8000/health
 
       - name: Push Docker image to GHCR
-        run: docker push ghcr.io/${{ github.repository_owner }}/taskmind-api:latest
+        run: |
+          docker push ghcr.io/${{ github.repository_owner }}/taskmind-api:latest
+          docker push ghcr.io/${{ github.repository_owner }}/taskmind-api:${{ github.sha }}
+
+      - name: Authenticate to Google Cloud
+        env:
+          GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
+        run: |
+          set -euo pipefail
+          echo "$GCP_SA_KEY" > gcp-key.json
+          gcloud auth activate-service-account --key-file=gcp-key.json
+          gcloud config set project taskmind-500207
+
+      - name: Configure Docker for Artifact Registry
+        run: |
+          gcloud auth configure-docker southamerica-east1-docker.pkg.dev --quiet
+
+      - name: Push Docker image to Artifact Registry
+        run: |
+          docker push southamerica-east1-docker.pkg.dev/taskmind-500207/taskmind/taskmind-api:v1
+
+      - name: Deploy to Cloud Run
+        run: |
+          gcloud run deploy taskmind-api \
+            --image=southamerica-east1-docker.pkg.dev/taskmind-500207/taskmind/taskmind-api:v1 \
+            --region=southamerica-east1 \
+            --platform=managed \
+            --quiet
